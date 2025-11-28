@@ -12,11 +12,46 @@ from yt_dlp import YoutubeDL
 # 1. CONFIG – UPDATE THESE PATHS
 # ===========================================================
 # Main account (Account 1) – always used first
-COOKIE_FILE_MAIN = "D:\Divo Auto Process\Insta Scraping\App\www.instagram.com_cookies.txt"
+COOKIE_FILE_MAIN = "/tmp/www.instagram.com_cookies_main.txt"
 
 # Second account (Account 2) – only used as fallback on specific errors
-COOKIE_FILE_ALT = "D:\Divo Auto Process\Insta Scraping\App\www.instagram.com_cookies_alt.txt"   # optional
+COOKIE_FILE_ALT = "/tmp/www.instagram.com_cookies_alt.txt"
 
+def write_cookie_from_secret(secret_key: str, path: str) -> bool:
+    """
+    Read cookie text from st.secrets[secret_key] and write it to 'path'.
+    Returns True if written, False if secret missing/empty.
+    """
+    value = st.secrets.get(secret_key, "")
+    if not value or not str(value).strip():
+        # If empty, make sure no stale file is left
+        if os.path.exists(path):
+            os.remove(path)
+        return False
+
+    Path(path).write_text(value, encoding="utf-8")
+    return True
+
+# ----- Create cookie files from secrets -----
+main_ok = write_cookie_from_secret("INSTAGRAM_COOKIE_MAIN", COOKIE_FILE_MAIN)
+alt_ok = write_cookie_from_secret("INSTAGRAM_COOKIE_ALT", COOKIE_FILE_ALT)
+
+if not main_ok:
+    # Stop early if main cookie is missing
+    raise RuntimeError(
+        "INSTAGRAM_COOKIE_MAIN is not set or empty in Streamlit secrets. "
+        "Set it in the app's Secrets section."
+    )
+
+# ----- Build cookie pool (main first, alt optional) -----
+cookie_pool = [COOKIE_FILE_MAIN]
+
+if alt_ok:
+    cookie_pool.append(COOKIE_FILE_ALT)
+    print("[INFO] Alt Instagram cookie enabled from secrets.")
+else:
+    print("[INFO] No alt cookie in secrets. Running with main cookie only.")
+    
 
 # ===========================================================
 # 2. Helper: Decide if we should retry with Account 2
@@ -94,24 +129,6 @@ def get_instagram_metadata(url: str, cookie_file: str) -> dict:
         "pub_time": pub_time,
         "insta_id": info.get("uploader") or info.get("uploader_id"),
     }
-
-
-# ===========================================================
-# 5. Build cookie pool (Account 1 always first; Account 2 if available)
-# ===========================================================
-cookie_pool = []
-
-if COOKIE_FILE_MAIN and os.path.exists(COOKIE_FILE_MAIN):
-    cookie_pool.append(COOKIE_FILE_MAIN)
-else:
-    # You might prefer to raise here if main cookie is mandatory
-    print(f"[WARN] Main cookie file not found: {COOKIE_FILE_MAIN}")
-
-if COOKIE_FILE_ALT and os.path.exists(COOKIE_FILE_ALT):
-    cookie_pool.append(COOKIE_FILE_ALT)
-    print("[INFO] Alt cookie file enabled.")
-else:
-    print(f"[INFO] Alt cookie file not found or not set: {COOKIE_FILE_ALT}")
 
 
 # ===========================================================
@@ -303,3 +320,4 @@ if st.button("Test fetch (direct Python call)"):
                 )
         except Exception as e:
             st.error(f"Unexpected error: {e}")
+

@@ -1,0 +1,7 @@
+streamlit
+fastapi
+uvicorn
+yt-dlp
+pandas
+openpyxl
+tqdm
